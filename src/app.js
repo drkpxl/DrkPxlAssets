@@ -16,6 +16,8 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const sharp = require('sharp');
+const multer = require('multer');
+const basicAuth = require('express-basic-auth');
 
 const app = express();
 const port = 4000;
@@ -72,103 +74,9 @@ app.get('/', (req, res) => {
           <meta charset="UTF-8">
           <title>DrkPxl Assets</title>
           <link rel="stylesheet" href="https://kit.fontawesome.com/b80313799d.css" crossorigin="anonymous">
-          <style>
-              /* Reset some basic styles */
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f9f9f9;
-            padding: 20px;
-        }
-
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-            color: #333;
-        }
-
-        ul {
-            list-style-type: none;
-            padding: 0;
-            max-width: 900px;
-            margin: 0 auto;
-        }
-
-        li {
-            background: #fff;
-            margin: 10px 0;
-            padding: 20px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        li:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-        }
-
-        a {
-            text-decoration: none;
-            color: black;
-            font-size: 1.2em;
-            transition: color 0.2s;
-        }
-
-        a:hover {
-            color: #0056b3;
-            text-decoration: underline;
-        }
-
-        /* Consistent sizing for thumbnails and icons */
-        .media-container {
-            width: 60px;
-            height: 60px;
-            margin-right: 20px;
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-color: #f1f1f1;
-            border-radius: 8px;
-            border: 1px solid #ddd;
-        }
-
-        img.thumbnail {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-radius: 8px;
-        }
-
-        .icon-container i {
-            font-size: 2em;
-            color: #555;
-        }
-
-        @media (max-width: 600px) {
-            li {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .media-container {
-                margin-right: 0;
-                margin-bottom: 10px;
-            }
-
-            a {
-                font-size: 1em;
-            }
-        }
-          </style>
+          <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap"
+        rel="stylesheet">
+          <link rel="stylesheet" href="assets/style.css">
       </head>
       <body>
           <h1>DrkPxl Assets</h1>
@@ -231,6 +139,66 @@ app.get('/', (req, res) => {
     res.send(htmlContent);
   });
 });
+
+// Basic authentication for admin page
+app.use('/admin', basicAuth({
+    users: { 'admin': 'password' }, // Change 'password' to a secure password
+    challenge: true,
+    unauthorizedResponse: (req) => 'Unauthorized'
+  }));
+  
+  // Multer setup for handling file uploads
+  const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, filesDir);
+    },
+    filename: (req, file, cb) => {
+      cb(null, file.originalname);
+    }
+  });
+  const upload = multer({ storage: storage });
+  
+  // Admin page route for uploading files
+  app.get('/admin', (req, res) => {
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <title>Admin Upload Page</title>
+          <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap"
+        rel="stylesheet">
+          <link rel="stylesheet" href="assets/style.css">
+      </head>
+      <body>
+          <h1>Upload Assets</h1>
+          <form action="/admin/upload" method="post" enctype="multipart/form-data">
+              <input type="file" name="file" multiple><br>
+              <button type="submit">Upload</button>
+          </form>
+      </body>
+      </html>
+    `);
+  });
+  
+  // Handle file upload
+  app.post('/admin/upload', upload.array('file'), (req, res) => {
+    req.files.forEach((file) => {
+      const fileExt = path.extname(file.originalname).toLowerCase().slice(1);
+      if (imageExtensions.includes(fileExt)) {
+        const thumbFullPath = path.join(thumbnailsDir, `${file.originalname}.png`);
+        sharp(file.path)
+          .resize(100, 100, { fit: 'inside' })
+          .toFile(thumbFullPath, (err) => {
+            if (err) {
+              console.error('Error generating thumbnail:', err);
+            }
+          });
+      }
+    });
+    res.redirect('/admin');
+  });
+
 
 // Start the server
 app.listen(port, () => {
